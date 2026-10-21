@@ -1,0 +1,632 @@
+{
+  "name": "Telegram Task Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "chatIds": "8932624583"
+        }
+      },
+      "id": "d24a8347-f0c8-4656-9a4c-2862271b6849",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        64,
+        -192
+      ],
+      "webhookId": "29d1c12d-1e36-4a8c-ae45-49c353978a45",
+      "credentials": {
+        "telegramApi": {
+          "id": "6qLMmZdulccdCVG1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text || '' }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    },
+                    "rightValue": "/task",
+                    "id": "6c405b11-e233-4b65-b9e1-8c0d937fd1e0"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "/task"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text || '' }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    },
+                    "rightValue": "/today",
+                    "id": "eb5d5157-d888-4da2-99c0-bd52de0e2aca"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "/today"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Other"
+        }
+      },
+      "id": "92f60c0c-83e1-4336-b25b-0fccd8ca15f4",
+      "name": "Route Command",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const TZ = 'Asia/Kolkata';\nconst DEFAULT_HOUR = 10;\nconst DURATION_MIN = 30;\n\nconst msg = $input.first().json.message;\nconst chatId = msg.chat.id;\nlet text = (msg.text || '').replace(/^\\/task(@\\w+)?/i, '').trim();\nconst now = DateTime.now().setZone(TZ);\n\nconst fail = (error) => [{ json: { ok: false, chatId, error } }];\nif (!text) return fail('Usage: /task Call Safexpress tomorrow 3pm');\n\nconst take = (re) => {\n  const m = text.match(re);\n  if (m) text = text.replace(m[0], ' ');\n  return m;\n};\n\nconst MONTHS = 'january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec';\nconst monthNum = (s) => ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(s.slice(0, 3).toLowerCase()) + 1;\nconst DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];\n\nfunction makeDate(day, month, year) {\n  const y = year ? (year.length === 2 ? 2000 + Number(year) : Number(year)) : now.year;\n  let d = DateTime.fromObject({ year: y, month, day }, { zone: TZ });\n  if (!year && d.isValid && d < now.startOf('day')) d = d.plus({ years: 1 });\n  return d;\n}\n\nlet hour = null, minute = 0, m;\nif ((m = take(/\\b(?:at\\s+)?(\\d{1,2})(?:[:.](\\d{2}))?\\s*(am|pm)\\b/i))) {\n  hour = (Number(m[1]) % 12) + (m[3].toLowerCase() === 'pm' ? 12 : 0);\n  minute = m[2] ? Number(m[2]) : 0;\n} else if ((m = take(/\\b(?:at\\s+)?([01]?\\d|2[0-3]):([0-5]\\d)\\b/))) {\n  hour = Number(m[1]);\n  minute = Number(m[2]);\n}\n\nlet date = null;\nif (take(/\\b(?:on\\s+)?day after tomorrow\\b/i)) {\n  date = now.plus({ days: 2 });\n} else if (take(/\\b(?:on\\s+)?(?:tomorrow|tmrw|tmr)\\b/i)) {\n  date = now.plus({ days: 1 });\n} else if (take(/\\b(?:on\\s+)?today\\b/i)) {\n  date = now;\n} else if ((m = take(new RegExp(`\\\\b(?:on\\\\s+)?(?:next\\\\s+)?(${DAYS.join('|')})\\\\b`, 'i')))) {\n  const target = DAYS.indexOf(m[1].toLowerCase()) + 1;\n  date = now.plus({ days: ((target - now.weekday + 7) % 7) || 7 });\n} else if ((m = take(new RegExp(`\\\\b(?:on\\\\s+)?(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(${MONTHS})\\\\b(?:\\\\s+(\\\\d{4}))?`, 'i')))) {\n  date = makeDate(Number(m[1]), monthNum(m[2]), m[3]);\n} else if ((m = take(new RegExp(`\\\\b(?:on\\\\s+)?(${MONTHS})\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?\\\\b(?:,?\\\\s+(\\\\d{4}))?`, 'i')))) {\n  date = makeDate(Number(m[2]), monthNum(m[1]), m[3]);\n} else if ((m = take(/\\b(?:on\\s+)?(\\d{1,2})[\\/-](\\d{1,2})(?:[\\/-](\\d{2,4}))?\\b/))) {\n  date = makeDate(Number(m[1]), Number(m[2]), m[3]);\n}\n\nif (hour === null) hour = DEFAULT_HOUR;\nif (!date) {\n  date = now.set({ hour, minute }) > now ? now : now.plus({ days: 1 });\n}\n\nconst start = date.set({ hour, minute, second: 0, millisecond: 0 });\nif (!start.isValid) return fail(\"Couldn't understand that date. Try: /task Pay GST 25/10 11am\");\n\nconst task = text.replace(/\\s+/g, ' ').replace(/^[\\s,–-]+|[\\s,–-]+$/g, '').trim();\nif (!task) return fail('What is the task? e.g. /task Call Safexpress tomorrow 3pm');\n\nconst end = start.plus({ minutes: DURATION_MIN });\n\nreturn [{ json: {\n  ok: true,\n  chatId,\n  task,\n  date: start.toFormat('yyyy-MM-dd'),\n  time: start.toFormat('HH:mm'),\n  start: start.toISO(),\n  end: end.toISO(),\n  pretty: start.toFormat('ccc d LLL, h:mm a'),\n  createdAt: now.toFormat('yyyy-MM-dd HH:mm'),\n}}];"
+      },
+      "id": "108a9099-b6af-4b26-91d9-112be67979ed",
+      "name": "Parse Task",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok-check",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "67708989-626e-4f5b-af58-c1514f2f53aa",
+      "name": "Parsed OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "anshshetty9594@gmail.com",
+          "cachedResultName": "anshshetty9594@gmail.com"
+        },
+        "start": "={{ $json.start }}",
+        "end": "={{ $json.end }}",
+        "additionalFields": {
+          "summary": "={{ $json.task }}"
+        }
+      },
+      "id": "dc6ddb10-f426-4fa2-bc85-d23f75ec1b80",
+      "name": "Create Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1024,
+        128
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "86YMQPrkMdGMBVW5",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1YiA3DU4iGP3bbl5QWOGl_x5qh_Q5KOERi1Mts6IzuQo",
+          "cachedResultName": "Task Bot",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YiA3DU4iGP3bbl5QWOGl_x5qh_Q5KOERi1Mts6IzuQo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Tasks"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Created At": "={{ $('Parse Task').item.json.createdAt }}",
+            "Task": "={{ $('Parse Task').item.json.task }}",
+            "Date": "={{ $('Parse Task').item.json.date }}",
+            "Time": "={{ $('Parse Task').item.json.time }}",
+            "Status": "Pending",
+            "Event ID": "={{ $json.id }}",
+            "Event Link": "={{ $json.htmlLink }}"
+          },
+          "schema": [
+            {
+              "id": "Created At",
+              "displayName": "Created At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Task",
+              "displayName": "Task",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Event ID",
+              "displayName": "Event ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Event Link",
+              "displayName": "Event Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "5d413a24-9201-47ba-8c3a-b0eb62250aba",
+      "name": "Log Task",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        128
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "knX8hzJgBi4Yr6HK",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Task').item.json.chatId }}",
+        "text": "=✅ Added: {{ $('Parse Task').item.json.task }}\n🗓 {{ $('Parse Task').item.json.pretty }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "79bcf122-7634-4440-a3e6-e88b63c8a19a",
+      "name": "Confirm Task",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1472,
+        128
+      ],
+      "webhookId": "94e84bc6-6457-44d6-ac1a-c4e49b080828",
+      "credentials": {
+        "telegramApi": {
+          "id": "6qLMmZdulccdCVG1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.error }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "66e62f0e-bc16-46ef-ba3a-7c295b814add",
+      "name": "Send Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1136,
+        192
+      ],
+      "webhookId": "aa375132-c8e5-4a60-b4f0-a37484c91760",
+      "credentials": {
+        "telegramApi": {
+          "id": "6qLMmZdulccdCVG1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1YiA3DU4iGP3bbl5QWOGl_x5qh_Q5KOERi1Mts6IzuQo",
+          "cachedResultName": "Task Bot",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YiA3DU4iGP3bbl5QWOGl_x5qh_Q5KOERi1Mts6IzuQo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Tasks"
+        },
+        "options": {
+          "outputFormatting": {
+            "values": {
+              "general": "FORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "id": "449b16cd-0e91-4509-8ae8-0412acca0c45",
+      "name": "Get Tasks",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        496,
+        416
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "knX8hzJgBi4Yr6HK",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(function (i) { return i.json; }).filter(function (r) { return Object.keys(r).length > 0; });\nconst chatId = $('Telegram Trigger').first().json.message.chat.id;\nconst today = new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);\n\nconst todays = rows\n  .filter(function (r) { return String(r.Date || '').trim() === today; })\n  .sort(function (a, b) { return String(a.Time || '').localeCompare(String(b.Time || '')); });\n\nlet text;\nif (todays.length === 0) {\n  text = '🎉 Nothing on your list for today.';\n} else {\n  const lines = todays.map(function (r, idx) {\n    const status = r.Status ? ' [' + r.Status + ']' : '';\n    return (idx + 1) + '. ' + (r.Time || '--:--') + ' - ' + r.Task + status;\n  });\n  text = \"📋 Today's tasks (\" + today + \"):\\n\" + lines.join('\\n');\n}\nreturn [{ json: { chatId: chatId, text: text } }];"
+      },
+      "id": "9b119a9a-9657-43d3-870a-ead9e832a1de",
+      "name": "Format Today",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "602ffe2d-f167-4c06-b253-5542abaebf97",
+      "name": "Send Today",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        944,
+        416
+      ],
+      "webhookId": "e233d4ee-81a2-44bc-9e5e-51708d38a020",
+      "credentials": {
+        "telegramApi": {
+          "id": "6qLMmZdulccdCVG1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "Commands:\n/task <what> <when> e.g. /task Call Safexpress tomorrow 3pm\n/today shows today's tasks",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "1199b3af-f175-4c36-a7cd-3b9e6ccb73b2",
+      "name": "Send Help",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        608,
+        480
+      ],
+      "webhookId": "17823101-5b82-49f4-af76-7941dfb7403a",
+      "credentials": {
+        "telegramApi": {
+          "id": "6qLMmZdulccdCVG1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        384,
+        -48
+      ],
+      "id": "c3bc1a95-5286-4783-ae2d-9e5a2cb1feb3",
+      "name": "AI Agent"
+    }
+  ],
+  "pinData": {
+    "Send Error": [
+      {
+        "json": {
+          "name": "First item",
+          "code": 1
+        }
+      },
+      {
+        "json": {
+          "name": "Second item",
+          "code": 2
+        }
+      }
+    ],
+    "Send Help": [
+      {
+        "json": {
+          "name": "First item",
+          "code": 1
+        }
+      },
+      {
+        "json": {
+          "name": "Second item",
+          "code": 2
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Command": {
+      "main": [
+        [
+          {
+            "node": "Parse Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Help",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Task": {
+      "main": [
+        [
+          {
+            "node": "Parsed OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsed OK?": {
+      "main": [
+        [
+          {
+            "node": "Create Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Event": {
+      "main": [
+        [
+          {
+            "node": "Log Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Task": {
+      "main": [
+        [
+          {
+            "node": "Confirm Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tasks": {
+      "main": [
+        [
+          {
+            "node": "Format Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Today": {
+      "main": [
+        [
+          {
+            "node": "Send Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "fd2ec6be-ac90-495d-bb4a-cb7b371a705f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3e50f42ce82243ae3239c940bba45c7e878f0712d0aa373eaa7326d5c6dd1ea5"
+  },
+  "nodeGroups": [
+    {
+      "id": "9948637e-b5e9-46a5-bb7c-fcee6501b068",
+      "name": "Understand request",
+      "nodeIds": [
+        "108a9099-b6af-4b26-91d9-112be67979ed",
+        "67708989-626e-4f5b-af58-c1514f2f53aa"
+      ],
+      "description": "Reads the /task message and works out the task, date and time, or flags what is unclear"
+    },
+    {
+      "id": "7b8165ea-e6b7-451d-9d9b-7af601cf203a",
+      "name": "Schedule and log task",
+      "nodeIds": [
+        "dc6ddb10-f426-4fa2-bc85-d23f75ec1b80",
+        "5d413a24-9201-47ba-8c3a-b0eb62250aba",
+        "79bcf122-7634-4440-a3e6-e88b63c8a19a"
+      ],
+      "description": "Adds a 30-minute calendar event, records it in the Task Bot sheet and confirms in chat"
+    },
+    {
+      "id": "549b0ce8-a6f5-4727-baba-1ad6b5d7c045",
+      "name": "Show today's tasks",
+      "nodeIds": [
+        "449b16cd-0e91-4509-8ae8-0412acca0c45",
+        "9b119a9a-9657-43d3-870a-ead9e832a1de",
+        "602ffe2d-f167-4c06-b253-5542abaebf97"
+      ],
+      "description": "Answers /today by listing today's pending tasks from the sheet, sorted by time"
+    }
+  ],
+  "id": "iRyHhAO0mcEFZ4lA",
+  "tags": []
+}
