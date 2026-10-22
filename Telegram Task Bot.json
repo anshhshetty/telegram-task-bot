@@ -1,5 +1,5 @@
 {
-  "name": "Telegram Task Bot",
+  "name": "TaskPilot AI",
   "nodes": [
     {
       "parameters": {
@@ -7,7 +7,7 @@
           "message"
         ],
         "additionalFields": {
-          "chatIds": "8932624583"
+          "chatIds": "YOUR_CHAT_ID"
         }
       },
       "id": "d24a8347-f0c8-4656-9a4c-2862271b6849",
@@ -77,6 +77,31 @@
               },
               "renameOutput": true,
               "outputKey": "/today"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "id": "4c72519d-8bd1-4abc-ba95-689a73c5a015",
+                    "leftValue": "={{ $json.message.voice ? 'voice' : '' }}",
+                    "rightValue": "voice",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Voice"
             }
           ]
         },
@@ -145,8 +170,8 @@
         "calendar": {
           "__rl": true,
           "mode": "list",
-          "value": "anshshetty9594@gmail.com",
-          "cachedResultName": "anshshetty9594@gmail.com"
+          "value": "YOUR_EMAIL@gmail.com",
+          "cachedResultName": "YOUR_EMAIL@gmail.com"
         },
         "start": "={{ $json.start }}",
         "end": "={{ $json.end }}",
@@ -175,9 +200,9 @@
         "documentId": {
           "__rl": true,
           "mode": "list",
-          "value": "1YiA3DU4iGP3bbl5QWOGl_x5qh_Q5KOERi1Mts6IzuQo",
+          "value": "YOUR_SHEET_ID",
           "cachedResultName": "Task Bot",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YiA3DU4iGP3bbl5QWOGl_x5qh_Q5KOERi1Mts6IzuQo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
         },
         "sheetName": {
           "__rl": true,
@@ -333,9 +358,9 @@
         "documentId": {
           "__rl": true,
           "mode": "list",
-          "value": "1YiA3DU4iGP3bbl5QWOGl_x5qh_Q5KOERi1Mts6IzuQo",
+          "value": "YOUR_SHEET_ID",
           "cachedResultName": "Task Bot",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YiA3DU4iGP3bbl5QWOGl_x5qh_Q5KOERi1Mts6IzuQo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
         },
         "sheetName": {
           "__rl": true,
@@ -430,48 +455,70 @@
     },
     {
       "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.voice.file_id }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        256,
+        1008
+      ],
+      "id": "19c297ce-8621-43ba-a3cd-857dcb9b0fc7",
+      "name": "Get Voice",
+      "webhookId": "be9d6db5-4cac-479f-a9b9-a76ff0606f34",
+      "credentials": {
+        "telegramApi": {
+          "id": "6qLMmZdulccdCVG1",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.6-flash",
+          "mode": "list",
+          "cachedResultName": "Gemini 3.6 Flash"
+        },
+        "text": "=Today is {{ $now.setZone('Asia/Kolkata').toFormat('cccc, d LLL yyyy') }}.\nListen to this voice note. The person may speak English, Hindi or Hinglish.\nReply with ONLY one command, nothing else:\n- To add a task: /task <what to do, in English> <when>\n  Write dates ONLY as: today, tomorrow, a weekday name (like monday), or dd/mm.\n  Write times ONLY like 3pm or 3:30pm.\n- If they ask about today's tasks: /today\n- If you cannot understand: /help\nExample: \"kal 3 baje Safexpress ko call karna hai\" → /task Call Safexpress tomorrow 3pm",
+        "inputType": "binary",
         "options": {}
       },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 3.1,
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
       "position": [
-        384,
-        -48
+        480,
+        1008
       ],
-      "id": "c3bc1a95-5286-4783-ae2d-9e5a2cb1feb3",
-      "name": "AI Agent"
+      "id": "4da3d538-7932-49d0-83cf-3eb5d3787d14",
+      "name": "Understand Voice",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "2EzDInSeUbTPc92k",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = $input.first().json;\nconst raw = out.text ?? out.content?.parts?.[0]?.text ?? JSON.stringify(out);\nconst found = String(raw).match(/\\/(task|today|help)\\b[^\\n\"\\\\]*/i);\nconst command = found ? found[0].trim() : '/help';\n\nconst original = $('Telegram Trigger').first().json.message;\nreturn [{ json: { message: { text: command, chat: original.chat, from: original.from } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        1008
+      ],
+      "id": "2da335df-b1ff-49ea-a5f7-fff5fff57511",
+      "name": "Make Command"
     }
   ],
-  "pinData": {
-    "Send Error": [
-      {
-        "json": {
-          "name": "First item",
-          "code": 1
-        }
-      },
-      {
-        "json": {
-          "name": "Second item",
-          "code": 2
-        }
-      }
-    ],
-    "Send Help": [
-      {
-        "json": {
-          "name": "First item",
-          "code": 1
-        }
-      },
-      {
-        "json": {
-          "name": "Second item",
-          "code": 2
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "connections": {
     "Telegram Trigger": {
       "main": [
@@ -496,6 +543,13 @@
         [
           {
             "node": "Get Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Voice",
             "type": "main",
             "index": 0
           }
@@ -581,6 +635,39 @@
           }
         ]
       ]
+    },
+    "Get Voice": {
+      "main": [
+        [
+          {
+            "node": "Understand Voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Understand Voice": {
+      "main": [
+        [
+          {
+            "node": "Make Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Command": {
+      "main": [
+        [
+          {
+            "node": "Route Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -591,7 +678,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "fd2ec6be-ac90-495d-bb4a-cb7b371a705f",
+  "versionId": "6add9578-9b0e-479d-a630-e6cd1a9880e9",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "3e50f42ce82243ae3239c940bba45c7e878f0712d0aa373eaa7326d5c6dd1ea5"
